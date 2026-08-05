@@ -47,7 +47,7 @@ export function ServiceArea({ embedded = false }: { embedded?: boolean }) {
         </div>
       </div>
 
-      <SectionAnchor id="reviews" className="mt-6 flex flex-col md:mt-5 md:min-h-0 md:flex-1">
+      <SectionAnchor id="reviews" className="mt-6 md:mt-5">
         <SectionHeading
           compact
           title="What customers say"

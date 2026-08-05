@@ -152,15 +152,43 @@ export const TESTIMONIALS = [
   },
 ] as const;
 
-export const CONTACT_SERVICES = [
-  "Pressure washing",
-  "Soft washing",
-  "Gutter cleaning",
-  "Junk removal",
-  "Garbage bin cleaning",
-  "Window cleaning",
-  "Moss removal",
-  "Lawn mowing",
-  "Home assistance",
-  "Other",
-] as const;
+export const CONTACT_FORM = {
+  trustSignals: [
+    "Free quotes",
+    "Local college students",
+    "Fully insured (if applicable)",
+    "Fast response times",
+  ],
+  responseNote: "We'll contact you within 24 hours regarding your request.",
+  services: [
+    "Pressure Washing",
+    "Soft Washing/House Wash",
+    "Window Cleaning",
+    "Gutter Cleaning",
+    "Moss Removal",
+    "Junk Removal",
+    "Garbage Bin Cleaning",
+    "Home Assistance Services",
+    "Other",
+  ],
+  timeline: [
+    "As Soon As Possible",
+    "Within 1 Week",
+    "Within 2 Weeks",
+    "This Month",
+    "Just Looking for a Quote",
+  ],
+  referralSources: [
+    "Flyer",
+    "Instagram",
+    "Facebook",
+    "Google Search",
+    "Referral",
+    "Friend/Neighbor",
+    "Other",
+  ],
+  estimatePreference: [
+    "Yes",
+    "No, a virtual quote is fine",
+  ],
+} as const;

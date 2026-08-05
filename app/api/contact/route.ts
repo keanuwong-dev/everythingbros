@@ -2,33 +2,120 @@ import { NextResponse } from "next/server";
 import { Resend } from "resend";
 import { SITE } from "@/lib/constants";
 
+const MAX_PHOTOS = 5;
+const MAX_PHOTO_BYTES = 100 * 1024 * 1024;
+const MAX_TOTAL_PHOTO_BYTES = 4 * 1024 * 1024;
+
 export async function POST(request: Request) {
   const formData = await request.formData();
 
   const name = String(formData.get("name") ?? "").trim();
   const phone = String(formData.get("phone") ?? "").trim();
   const email = String(formData.get("email") ?? "").trim();
-  const address = String(formData.get("address") ?? "").trim();
-  const message = String(formData.get("message") ?? "").trim();
+  const propertyAddress = String(formData.get("propertyAddress") ?? "").trim();
+  const projectDescription = String(formData.get("projectDescription") ?? "").trim();
+  const timeline = String(formData.get("timeline") ?? "").trim();
+  const referralSource = String(formData.get("referralSource") ?? "").trim();
+  const referralOther = String(formData.get("referralOther") ?? "").trim();
+  const servicesOther = String(formData.get("servicesOther") ?? "").trim();
+  const estimatePreference = String(formData.get("estimatePreference") ?? "").trim();
   const services = formData.getAll("services").map(String);
 
-  if (!name || !phone || !email) {
+  const photos = formData.getAll("photos").filter((entry): entry is File => {
+    return entry instanceof File && entry.size > 0;
+  });
+
+  if (!name || !phone) {
     return NextResponse.json(
-      { error: "Name, phone, and email are required." },
+      { error: "Full name and phone number are required." },
       { status: 400 },
     );
   }
 
+  if (services.length === 0) {
+    return NextResponse.json(
+      { error: "Please select at least one service." },
+      { status: 400 },
+    );
+  }
+
+  if (services.includes("Other") && !servicesOther) {
+    return NextResponse.json(
+      { error: 'Please describe the service under "Other".' },
+      { status: 400 },
+    );
+  }
+
+  if (!propertyAddress || !projectDescription || !timeline || !referralSource || !estimatePreference) {
+    return NextResponse.json(
+      { error: "Please fill in all required fields." },
+      { status: 400 },
+    );
+  }
+
+  if (referralSource === "Other" && !referralOther) {
+    return NextResponse.json(
+      { error: 'Please tell us how you heard about us under "Other".' },
+      { status: 400 },
+    );
+  }
+
+  if (photos.length > MAX_PHOTOS) {
+    return NextResponse.json(
+      { error: `You can upload up to ${MAX_PHOTOS} photos.` },
+      { status: 400 },
+    );
+  }
+
+  for (const photo of photos) {
+    if (photo.size > MAX_PHOTO_BYTES) {
+      return NextResponse.json(
+        { error: "Each photo must be 100 MB or smaller." },
+        { status: 400 },
+      );
+    }
+  }
+
+  const totalPhotoBytes = photos.reduce((sum, photo) => sum + photo.size, 0);
+  if (totalPhotoBytes > MAX_TOTAL_PHOTO_BYTES) {
+    return NextResponse.json(
+      {
+        error:
+          "Total photo size must be under 4 MB for web upload. Email us directly for larger files.",
+      },
+      { status: 400 },
+    );
+  }
+
+  const servicesList = services
+    .map((service) => (service === "Other" ? `Other: ${servicesOther}` : service))
+    .join(", ");
+
+  const referralDisplay =
+    referralSource === "Other" ? `Other: ${referralOther}` : referralSource;
+
   const emailBody = [
-    `Name: ${name}`,
+    `Full Name: ${name}`,
     `Phone: ${phone}`,
-    `Email: ${email}`,
-    `Address/Neighborhood: ${address || "Not provided"}`,
-    `Services: ${services.length ? services.join(", ") : "Not specified"}`,
+    `Email: ${email || "Not provided"}`,
+    `Services Needed: ${servicesList}`,
+    `Property Address: ${propertyAddress}`,
     "",
-    "Message:",
-    message || "No message provided",
+    "Project Description:",
+    projectDescription,
+    "",
+    `Timeline: ${timeline}`,
+    `How They Heard About Us: ${referralDisplay}`,
+    `In-Person Estimate: ${estimatePreference}`,
+    `Photos Attached: ${photos.length}`,
   ].join("\n");
+
+  const attachments = await Promise.all(
+    photos.map(async (photo) => ({
+      filename: photo.name,
+      content: Buffer.from(await photo.arrayBuffer()),
+    })),
+  );
 
   const resendKey = process.env.RESEND_API_KEY;
 
@@ -40,9 +127,10 @@ export async function POST(request: Request) {
     const { error } = await resend.emails.send({
       from,
       to: SITE.email,
-      replyTo: email,
+      ...(email ? { replyTo: email } : {}),
       subject: `New quote request from ${name}`,
       text: emailBody,
+      attachments: attachments.length ? attachments : undefined,
     });
 
     if (error) {
@@ -56,7 +144,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true });
   }
 
-  // Fallback: log and succeed so the UI works during development
   console.log("Contact form submission (Resend not configured):\n", emailBody);
+  if (photos.length) {
+    console.log(
+      "Photo attachments:",
+      photos.map((photo) => `${photo.name} (${photo.size} bytes)`),
+    );
+  }
+
   return NextResponse.json({ success: true, fallback: true });
 }
