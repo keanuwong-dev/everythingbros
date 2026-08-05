@@ -26,7 +26,6 @@ function getTargetScrollTop(container: HTMLElement, el: HTMLElement): number {
 export function PageScroll({ children }: { children: React.ReactNode }) {
   const ref = useRef<HTMLElement>(null);
   const snapDisabledRef = useRef(false);
-  const freedRef = useRef(false);
   const hashNavRef = useRef(false);
 
   useEffect(() => {
@@ -36,27 +35,14 @@ export function PageScroll({ children }: { children: React.ReactNode }) {
     const mobileMq = window.matchMedia(MOBILE_SNAP_MQ);
     const isMobile = () => mobileMq.matches;
 
-    const getPanels = () =>
-      container.querySelectorAll<HTMLElement>("[data-snap-panel]");
-
     const getPanelBounds = () => {
-      const panels = getPanels();
+      const panels = container.querySelectorAll<HTMLElement>("[data-snap-panel]");
       const last = panels[panels.length - 1];
       if (!last) return null;
 
       return {
-        lastPanelTop: last.offsetTop,
         lastPanelBottom: last.offsetTop + last.offsetHeight,
       };
-    };
-
-    const isNearPanelSnapPoint = (scrollTop: number) => {
-      for (const panel of getPanels()) {
-        if (Math.abs(scrollTop - panel.offsetTop) <= SNAP_THRESHOLD) {
-          return true;
-        }
-      }
-      return false;
     };
 
     const setSnapEnabled = (enabled: boolean) => {
@@ -77,9 +63,21 @@ export function PageScroll({ children }: { children: React.ReactNode }) {
       }
     };
 
-    const disableSnap = () => {
-      freedRef.current = true;
-      setSnapEnabled(false);
+    const updateSnap = () => {
+      if (isMobile() || hashNavRef.current) return;
+
+      const bounds = getPanelBounds();
+      if (!bounds) return;
+
+      const { lastPanelBottom } = bounds;
+      const scrollTop = container.scrollTop;
+      const viewportHeight = container.clientHeight;
+
+      // Only release snap once we've scrolled past the last panel into contact/footer
+      const inFreeScrollZone =
+        scrollTop > lastPanelBottom - viewportHeight + SNAP_THRESHOLD;
+
+      setSnapEnabled(!inFreeScrollZone);
     };
 
     const scrollToHash = (hash: string, smooth: boolean) => {
@@ -95,11 +93,10 @@ export function PageScroll({ children }: { children: React.ReactNode }) {
 
       if (panel && !isMobile()) {
         top = getPanelScrollTop(container, panel);
-        freedRef.current = false;
         setSnapEnabled(true);
       } else {
-        disableSnap();
         top = getTargetScrollTop(container, el);
+        setSnapEnabled(false);
       }
 
       container.scrollTo({
@@ -108,37 +105,6 @@ export function PageScroll({ children }: { children: React.ReactNode }) {
       });
 
       return true;
-    };
-
-    const updateSnap = () => {
-      if (isMobile() || hashNavRef.current) return;
-
-      const bounds = getPanelBounds();
-      if (!bounds) return;
-
-      const { lastPanelTop, lastPanelBottom } = bounds;
-      const scrollTop = container.scrollTop;
-      const viewBottom = scrollTop + container.clientHeight;
-
-      const nearContact = viewBottom >= lastPanelBottom - SNAP_THRESHOLD;
-
-      if (nearContact) {
-        freedRef.current = true;
-        setSnapEnabled(false);
-        return;
-      }
-
-      if (freedRef.current && scrollTop > lastPanelTop) {
-        setSnapEnabled(false);
-        return;
-      }
-
-      if (isNearPanelSnapPoint(scrollTop)) {
-        freedRef.current = false;
-        setSnapEnabled(true);
-      } else {
-        setSnapEnabled(false);
-      }
     };
 
     let scrollEndTimer: ReturnType<typeof setTimeout>;
@@ -163,7 +129,7 @@ export function PageScroll({ children }: { children: React.ReactNode }) {
 
       if (href === "#") {
         hashNavRef.current = true;
-        disableSnap();
+        setSnapEnabled(true);
         container.scrollTo({ top: 0, behavior: "smooth" });
         history.pushState(null, "", window.location.pathname);
         return;
@@ -177,22 +143,6 @@ export function PageScroll({ children }: { children: React.ReactNode }) {
     const onHashChange = () => {
       scrollToHash(window.location.hash, true);
     };
-
-    const freeScrollEl = container.querySelector<HTMLElement>("[data-free-scroll]");
-    let observer: IntersectionObserver | undefined;
-
-    if (freeScrollEl) {
-      observer = new IntersectionObserver(
-        ([entry]) => {
-          if (isMobile()) return;
-          if (entry.isIntersecting) {
-            disableSnap();
-          }
-        },
-        { root: container, threshold: 0 },
-      );
-      observer.observe(freeScrollEl);
-    }
 
     const onMobileChange = () => {
       applyMobileMode();
@@ -225,7 +175,6 @@ export function PageScroll({ children }: { children: React.ReactNode }) {
       window.removeEventListener("hashchange", onHashChange);
       mobileMq.removeEventListener("change", onMobileChange);
       document.removeEventListener("click", onNavClick);
-      observer?.disconnect();
     };
   }, []);
 
